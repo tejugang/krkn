@@ -596,6 +596,23 @@ class TestBuildChaosReportClusterOverview(unittest.TestCase):
         self.assertIn("worker", report)
         self.assertIn("m6i.xlarge", report)
 
+    def test_node_summary_with_none_values(self):
+        output = _minimal_chaos_output()
+        output["telemetry"]["node_summary_infos"] = [{
+            "nodes_type": None,
+            "count": 3,
+            "instance_type": None,
+            "architecture": "amd64",
+            "kubelet_version": "v1.28.0",
+            "os_version": "Linux",
+        }]
+        report = build_chaos_report(output)
+        self.assertIn("CLUSTER OVERVIEW", report)
+        overview_start = report.index("CLUSTER OVERVIEW")
+        overview_section = report[overview_start:overview_start + 200]
+        self.assertIn("N/A", overview_section)
+        self.assertNotIn("None", overview_section)
+
     def test_no_overview_when_empty(self):
         output = _minimal_chaos_output()
         output["telemetry"]["node_summary_infos"] = []
@@ -807,11 +824,8 @@ class TestBuildChaosReportEdgeCases(unittest.TestCase):
 
 class TestBuildChaosReportPdf(unittest.TestCase):
 
-    @patch("weasyprint.HTML")
-    def test_pdf_generated(self, mock_html_cls):
-        mock_html_instance = MagicMock()
-        mock_html_cls.return_value = mock_html_instance
-
+    @patch("reportlab.platypus.SimpleDocTemplate.build")
+    def test_pdf_generated(self, mock_build):
         output = _minimal_chaos_output()
         output["telemetry"]["scenarios"] = [_make_scenario(
             parameters=[{"id": "kill", "config": {"label_selector": "app=etcd",
@@ -835,15 +849,13 @@ class TestBuildChaosReportPdf(unittest.TestCase):
         try:
             result = build_chaos_report_pdf(output, pdf_path)
             self.assertEqual(result, pdf_path)
-            mock_html_cls.assert_called_once()
-            mock_html_instance.write_pdf.assert_called_once_with(pdf_path)
+            mock_build.assert_called_once()
         finally:
             if os.path.exists(pdf_path):
                 os.unlink(pdf_path)
 
-    @patch("weasyprint.HTML")
-    def test_pdf_with_node_recovery(self, mock_html_cls):
-        mock_html_cls.return_value = MagicMock()
+    @patch("reportlab.platypus.SimpleDocTemplate.build")
+    def test_pdf_with_node_recovery(self, mock_build):
         output = _minimal_chaos_output()
         output["telemetry"]["scenarios"] = [_make_scenario(
             affected_nodes=[{
@@ -855,14 +867,13 @@ class TestBuildChaosReportPdf(unittest.TestCase):
             pdf_path = f.name
         try:
             build_chaos_report_pdf(output, pdf_path)
-            mock_html_cls.assert_called_once()
+            mock_build.assert_called_once()
         finally:
             if os.path.exists(pdf_path):
                 os.unlink(pdf_path)
 
-    @patch("weasyprint.HTML")
-    def test_pdf_with_vmi_recovery(self, mock_html_cls):
-        mock_html_cls.return_value = MagicMock()
+    @patch("reportlab.platypus.SimpleDocTemplate.build")
+    def test_pdf_with_vmi_recovery(self, mock_build):
         output = _minimal_chaos_output()
         output["telemetry"]["scenarios"] = [_make_scenario(
             affected_vmis={
@@ -877,14 +888,13 @@ class TestBuildChaosReportPdf(unittest.TestCase):
             pdf_path = f.name
         try:
             build_chaos_report_pdf(output, pdf_path)
-            mock_html_cls.assert_called_once()
+            mock_build.assert_called_once()
         finally:
             if os.path.exists(pdf_path):
                 os.unlink(pdf_path)
 
-    @patch("weasyprint.HTML")
-    def test_pdf_with_none_recovery_times(self, mock_html_cls):
-        mock_html_cls.return_value = MagicMock()
+    @patch("reportlab.platypus.SimpleDocTemplate.build")
+    def test_pdf_with_none_recovery_times(self, mock_build):
         output = _minimal_chaos_output()
         output["telemetry"]["scenarios"] = [_make_scenario(
             affected_pods={
@@ -904,14 +914,13 @@ class TestBuildChaosReportPdf(unittest.TestCase):
             pdf_path = f.name
         try:
             build_chaos_report_pdf(output, pdf_path)
-            mock_html_cls.assert_called_once()
+            mock_build.assert_called_once()
         finally:
             if os.path.exists(pdf_path):
                 os.unlink(pdf_path)
 
-    @patch("weasyprint.HTML")
-    def test_pdf_with_cluster_events(self, mock_html_cls):
-        mock_html_cls.return_value = MagicMock()
+    @patch("reportlab.platypus.SimpleDocTemplate.build")
+    def test_pdf_with_cluster_events(self, mock_build):
         output = _minimal_chaos_output()
         output["telemetry"]["scenarios"] = [_make_scenario(
             cluster_events=[
@@ -923,14 +932,13 @@ class TestBuildChaosReportPdf(unittest.TestCase):
             pdf_path = f.name
         try:
             build_chaos_report_pdf(output, pdf_path)
-            mock_html_cls.assert_called_once()
+            mock_build.assert_called_once()
         finally:
             if os.path.exists(pdf_path):
                 os.unlink(pdf_path)
 
-    @patch("weasyprint.HTML")
-    def test_pdf_with_additional_telemetry(self, mock_html_cls):
-        mock_html_cls.return_value = MagicMock()
+    @patch("reportlab.platypus.SimpleDocTemplate.build")
+    def test_pdf_with_additional_telemetry(self, mock_build):
         output = _minimal_chaos_output()
         output["telemetry"]["scenarios"] = [_make_scenario(
             additional_telemetry={"rps": 100},
@@ -939,20 +947,19 @@ class TestBuildChaosReportPdf(unittest.TestCase):
             pdf_path = f.name
         try:
             build_chaos_report_pdf(output, pdf_path)
-            mock_html_cls.assert_called_once()
+            mock_build.assert_called_once()
         finally:
             if os.path.exists(pdf_path):
                 os.unlink(pdf_path)
 
-    @patch("weasyprint.HTML")
-    def test_pdf_empty_scenarios(self, mock_html_cls):
-        mock_html_cls.return_value = MagicMock()
+    @patch("reportlab.platypus.SimpleDocTemplate.build")
+    def test_pdf_empty_scenarios(self, mock_build):
         output = _minimal_chaos_output()
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             pdf_path = f.name
         try:
             build_chaos_report_pdf(output, pdf_path)
-            mock_html_cls.assert_called_once()
+            mock_build.assert_called_once()
         finally:
             if os.path.exists(pdf_path):
                 os.unlink(pdf_path)
